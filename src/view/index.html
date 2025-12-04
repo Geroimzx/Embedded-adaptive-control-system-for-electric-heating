@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Термостат ESP32</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" href="data:,">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Керування електричним опаленням</h1>
+            <div id="connection-status" class="status-badge offline">З’єднання...</div>
+        </header>
+
+        <nav class="tabs">
+            <button class="tab-btn active" data-tab="dashboard">Панель</button>
+            <button class="tab-btn" data-tab="schedule">Розклад</button>
+            <button class="tab-btn" data-tab="settings">Налаштування</button>
+        </nav>
+
+        <!-- DASHBOARD TAB -->
+        <div id="dashboard" class="tab-content active">
+            <div class="card-grid">
+                <div class="card">
+                    <h3>Температура в кімнаті</h3>
+                    <div class="value"><span id="temp-room">--</span> <span class="unit">°C</span></div>
+                </div>
+                <div class="card">
+                    <h3>Температура ззовні</h3>
+                    <div class="value"><span id="temp-outside">--</span> <span class="unit">°C</span></div>
+                </div>
+                <div class="card">
+                    <h3>Цільова температура</h3>
+                    <div class="value"><span id="current-setpoint">--</span> <span class="unit">°C</span></div>
+                </div>
+                <div class="card">
+                    <h3>Ціль (Ручний режим)</h3>
+                    <div class="control-group">
+                        <button id="btn-dec-temp">-</button>
+                        <span class="value" id="manual-setpoint">--</span>
+                        <button id="btn-inc-temp">+</button>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Режим системи</h3>
+                    <div class="value small" id="sys-mode">--</div>
+                </div>
+                <div class="card">
+                    <h3>Стан нагрівача</h3>
+                    <div class="value small" id="heater-state">--</div>
+                </div>
+            </div>
+            
+            <div class="card full-width">
+                <h3>Зміна режиму роботи</h3>
+                <div class="actions">
+                    <button class="mode-btn" data-mode="MANUAL">Ручний</button>
+                    <button class="mode-btn" data-mode="PROGRAMMED">Програмований</button>
+                    <button class="mode-btn" data-mode="ADAPTIVE">Адаптивний</button> 
+                    <button class="mode-btn danger" data-mode="OFF">Вимкнено</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- SCHEDULE TAB -->
+        <div id="schedule" class="tab-content">
+            <div class="section">
+                <h3>Тижневий розклад (програмований)</h3>
+                <div class="day-selector">
+                    <button class="day-btn active" data-day="1">Пн</button>
+                    <button class="day-btn" data-day="2">Вт</button>
+                    <button class="day-btn" data-day="3">Ср</button>
+                    <button class="day-btn" data-day="4">Чт</button>
+                    <button class="day-btn" data-day="5">Пт</button>
+                    <button class="day-btn" data-day="6">Сб</button>
+                    <button class="day-btn" data-day="0">Нд</button>
+                </div>
+                
+                <div id="schedule-editor">
+                    <p style="text-align:center; color:#888;">Оберіть день для редагування</p>
+                </div>
+                
+                <div class="btn-group">
+                    <button onclick="saveSchedule()" class="primary">Зберегти розклад</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- SETTINGS TAB -->
+        <div id="settings" class="tab-content">
+            <form id="config-form">
+                <div class="section">
+                    <h3>Wi-Fi (Станція)</h3>
+                    <label>SSID <input type="text" id="wifi_ssid"></label>
+                    <label>Пароль <input type="password" id="wifi_pass" placeholder="Залиште порожнім, щоб не змінювати"></label>
+                </div>
+
+                <div class="section">
+                    <h3>MQTT</h3>
+                    <label>Хост <input type="text" id="mqtt_host"></label>
+                    <label>Порт <input type="number" id="mqtt_port"></label>
+                    <label>Токен <input type="text" id="mqtt_token"></label>
+                </div>
+
+                <div class="section">
+                    <h3>Погода (Геодані)</h3>
+                    <div class="row">
+                        <label>Широта <input type="number" step="0.0001" id="geo_lat" placeholder="50.45"></label>
+                        <label>Довгота <input type="number" step="0.0001" id="geo_lon" placeholder="30.52"></label>
+                    </div>
+                    <label>Інтервал оновлення (хв) <input type="number" id="geo_interval" placeholder="15"></label>
+                </div>
+
+                <div class="section">
+                    <h3>PID керування та PWM</h3>
+                    <div class="row">
+                        <label>Kp <input type="number" step="0.1" id="pid_kp"></label>
+                        <label>Ki <input type="number" step="0.01" id="pid_ki"></label>
+                        <label>Kd <input type="number" step="0.01" id="pid_kd"></label>
+                    </div>
+                    <div class="row">
+                         <label>Цикл PWM (сек) <input type="number" id="pwm_cycle" placeholder="60"></label>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>Обмеження</h3>
+                    <div class="row">
+                        <label>Макс. радіатор (°C) <input type="number" id="lim_rad"></label>
+                        <label>Мін. температура в кімнаті (°C) <input type="number" step="0.1" id="lim_min"></label>
+                        <label>Макс. температура в кімнаті (°C) <input type="number" step="0.1" id="lim_max"></label>
+                    </div>
+                </div>
+
+                <div class="btn-group">
+                    <button type="button" id="btn-reload">Перезавантажити</button>
+                    <button type="submit" class="primary">Зберегти та перезапустити</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
